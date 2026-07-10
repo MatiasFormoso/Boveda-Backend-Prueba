@@ -22,17 +22,21 @@ export function handleRouteError(err: unknown) {
   return jsonError(500, "Error interno del servidor");
 }
 
+/** Traduce excepciones PL/pgSQL a códigos HTTP del contrato de la API. */
 function mapPgError(err: DatabaseError): { status: number; message: string } | null {
   const message = cleanPgMessage(err.message);
 
+  // no_data_found → 404
   if (err.code === "P0002" || err.code === "02000") {
     return { status: 404, message };
   }
 
+  // CHECK saldo o RAISE saldo insuficiente → 409
   if (err.code === "23514" || message.toLowerCase().includes("saldo insuficiente")) {
     return { status: 409, message };
   }
 
+  // Monto inválido o misma cuenta en transferencia → 400
   if (
     err.code === "22023" ||
     message.toLowerCase().includes("debe ser mayor a cero") ||
@@ -45,6 +49,7 @@ function mapPgError(err: DatabaseError): { status: number; message: string } | n
     return { status: 404, message };
   }
 
+  // UUID mal formado en parámetro de ruta → 400
   if (err.code === "22P02") {
     return { status: 400, message: "Identificador de cuenta inválido" };
   }

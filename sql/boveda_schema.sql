@@ -77,6 +77,8 @@ CREATE TRIGGER trg_movements_immutable
 
 -- ============================================================================
 --  FUNCIONES DE OPERACIÓN
+--  Lógica financiera centralizada en PL/pgSQL (RF-CNC-001/002).
+--  Cada función corre en una transacción implícita: todo o nada.
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION wallet_deposit(
@@ -93,6 +95,7 @@ BEGIN
     RAISE EXCEPTION 'El monto a acreditar debe ser mayor a cero' USING ERRCODE = '22023';
   END IF;
 
+  -- Idempotencia (RF-CNC-002): clave global UNIQUE; reintento devuelve el mismo operation_id sin re-ejecutar.
   IF p_idem IS NOT NULL THEN
     SELECT id INTO v_op_id FROM wallet_operations WHERE idempotency_key = p_idem;
     IF FOUND THEN
@@ -100,6 +103,7 @@ BEGIN
     END IF;
   END IF;
 
+  -- FOR UPDATE serializa operaciones concurrentes sobre la misma cuenta.
   PERFORM 1 FROM accounts WHERE id = p_account_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'La cuenta % no existe', p_account_id USING ERRCODE = 'no_data_found';
@@ -136,6 +140,7 @@ BEGIN
     RAISE EXCEPTION 'El monto a debitar debe ser mayor a cero' USING ERRCODE = '22023';
   END IF;
 
+  -- Idempotencia (RF-CNC-002): ver wallet_deposit.
   IF p_idem IS NOT NULL THEN
     SELECT id INTO v_op_id FROM wallet_operations WHERE idempotency_key = p_idem;
     IF FOUND THEN
@@ -143,6 +148,7 @@ BEGIN
     END IF;
   END IF;
 
+  -- Lock + lectura de saldo antes de debitar; rechaza si balance < monto (→ HTTP 409).
   SELECT balance INTO v_balance FROM accounts WHERE id = p_account_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'La cuenta % no existe', p_account_id USING ERRCODE = 'no_data_found';
@@ -190,6 +196,7 @@ BEGIN
     RAISE EXCEPTION 'La cuenta origen y destino no pueden ser la misma' USING ERRCODE = '22023';
   END IF;
 
+  -- Idempotencia (RF-CNC-002): ver wallet_deposit.
   IF p_idem IS NOT NULL THEN
     SELECT id INTO v_op_id FROM wallet_operations WHERE idempotency_key = p_idem;
     IF FOUND THEN
@@ -197,6 +204,7 @@ BEGIN
     END IF;
   END IF;
 
+  -- Locks en orden UUID fijo (LEAST/GREATEST) para evitar deadlock A→B vs B→A simultáneas.
   v_first  := LEAST(p_from_id, p_to_id);
   v_second := GREATEST(p_from_id, p_to_id);
   PERFORM 1 FROM accounts WHERE id = v_first  FOR UPDATE;
@@ -219,6 +227,7 @@ BEGIN
   VALUES ('transferencia', p_idem)
   RETURNING id INTO v_op_id;
 
+  -- Una operación, dos movimientos (salida + entrada) vinculados por operation_id (RF-TRF-004).
   UPDATE accounts SET balance = balance - p_amount, updated_at = now()
    WHERE id = p_from_id RETURNING balance INTO v_from_balance;
   INSERT INTO movements (operation_id, account_id, type, amount, balance_after, description)
