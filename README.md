@@ -75,7 +75,7 @@ El DRF indica un frontend provisto que consume la API sin modificarlo. El ZIP de
 Ante esa restricción, **no se modificó el frontend**. La validación del backend se realizó con:
 
 - **`Boveda_Postman_Collection.json`** — todos los endpoints, casos de error e idempotencia
-- **`npm test`** — test de concurrencia: 50 retiros simultáneos sobre $100; verifica 10 éxitos, 40 rechazos y saldo final $0
+- **`npm test`** — tests de integración: concurrencia (50 retiros simultáneos) e idempotencia (deposit, withdraw, transfer)
 
 Si disponen del cliente final conectado a la API, los endpoints están listos para consumirlo sin cambios.
 
@@ -111,7 +111,9 @@ Trigger que bloquea `UPDATE`/`DELETE` en `movements`.
 ├── Boveda_Postman_Collection.json
 ├── sql/boveda_schema.sql
 ├── scripts/db-setup.ts
-├── tests/concurrency.test.ts
+├── tests/
+│   ├── concurrency.test.ts
+│   └── idempotency.test.ts
 ├── docker-compose.yml
 └── src/app/api/          Route Handlers
 ```

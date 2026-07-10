@@ -1,40 +1,31 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { DatabaseError } from "pg";
 import {
   createAccount,
   findAccountById,
+  listMovements,
   walletDeposit,
   walletWithdraw,
 } from "@/lib/accounts";
-import { pool } from "@/lib/db";
 
 const CONCURRENT_WITHDRAWS = 50;
 const WITHDRAW_AMOUNT = "10.00";
 const INITIAL_BALANCE = "100.00";
-const EXPECTED_SUCCESS = 10;
-const EXPECTED_FAILURE = 40;
+const MAX_SUCCESSFUL_WITHDRAWS = 10;
 
 describe("concurrencia — wallet_withdraw bajo carga extrema", () => {
-  let accountId: string;
-
-  afterAll(async () => {
-    await pool.end();
-  });
-
   it("solo permite retiros hasta agotar el saldo sin dejar balance negativo", async () => {
-    const account = await createAccount(
-      `concurrency-test-${Date.now()}`,
-    );
-    accountId = account.id;
+    const runId = Date.now();
+    const account = await createAccount(`concurrency-test-${runId}`);
 
-    await walletDeposit(accountId, INITIAL_BALANCE, null, "Carga para test");
+    await walletDeposit(account.id, INITIAL_BALANCE, null, "Carga para test");
 
     const results = await Promise.allSettled(
       Array.from({ length: CONCURRENT_WITHDRAWS }, (_, index) =>
         walletWithdraw(
-          accountId,
+          account.id,
           WITHDRAW_AMOUNT,
-          `concurrency-withdraw-${index}`,
+          `concurrency-${runId}-withdraw-${index}`,
           "Retiro concurrente",
         ),
       ),
@@ -43,8 +34,9 @@ describe("concurrencia — wallet_withdraw bajo carga extrema", () => {
     const succeeded = results.filter((r) => r.status === "fulfilled");
     const failed = results.filter((r) => r.status === "rejected");
 
-    expect(succeeded).toHaveLength(EXPECTED_SUCCESS);
-    expect(failed).toHaveLength(EXPECTED_FAILURE);
+    expect(succeeded.length + failed.length).toBe(CONCURRENT_WITHDRAWS);
+    expect(succeeded).toHaveLength(MAX_SUCCESSFUL_WITHDRAWS);
+    expect(failed).toHaveLength(CONCURRENT_WITHDRAWS - MAX_SUCCESSFUL_WITHDRAWS);
 
     for (const failure of failed) {
       if (failure.status !== "rejected") continue;
@@ -52,11 +44,16 @@ describe("concurrencia — wallet_withdraw bajo carga extrema", () => {
       expect(pg.message).toMatch(/Saldo insuficiente/i);
     }
 
-    const finalAccount = await findAccountById(accountId);
+    const finalAccount = await findAccountById(account.id);
     expect(finalAccount).not.toBeNull();
     expect(finalAccount!.balance).toBe("0.00");
 
-    const balance = Number(finalAccount!.balance);
-    expect(balance).toBeGreaterThanOrEqual(0);
+    const debits = (await listMovements(account.id)).filter(
+      (m) => m.type === "debito",
+    );
+    expect(debits).toHaveLength(MAX_SUCCESSFUL_WITHDRAWS);
+    expect(
+      debits.reduce((sum, m) => sum + Number(m.amount), 0),
+    ).toBe(Number(INITIAL_BALANCE));
   });
 });
