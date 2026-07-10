@@ -1,0 +1,242 @@
+{
+  "info": {
+    "_postman_id": "boveda-backend-prueba-2026",
+    "name": "Bóveda API — Colección completa",
+    "description": "API REST del Proyecto Bóveda (Magne Studios).\n\nIncluye endpoints obligatorios (Sección 4 del DRF) y módulo deseable RF-RES (resumen y filtros).\n\n**Requisitos previos**\n1. `npm install` + `npm run db:setup`\n2. `npm run dev` → backend en `{{baseUrl}}`\n\n**Variables**\n- `baseUrl`: http://localhost:3000\n- `accountId`, `fromId`, `toId`: se autocompletan al listar cuentas\n- `idempotencyKey`: clave de idempotencia para operaciones de saldo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "accountId", "value": "" },
+    { "key": "fromId", "value": "" },
+    { "key": "toId", "value": "" },
+    { "key": "idempotencyKey", "value": "demo-{{$timestamp}}" }
+  ],
+  "item": [
+    {
+      "name": "Cuentas",
+      "item": [
+        {
+          "name": "Crear cuenta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('accountId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titular\": \"Juan Pérez\"\n}"
+            },
+            "url": "{{baseUrl}}/api/accounts",
+            "description": "RF-CTA-001"
+          }
+        },
+        {
+          "name": "Listar cuentas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const accounts = pm.response.json();",
+                  "  if (accounts[0]) pm.collectionVariables.set('accountId', accounts[0].id);",
+                  "  if (accounts[0]) pm.collectionVariables.set('fromId', accounts[0].id);",
+                  "  if (accounts[1]) pm.collectionVariables.set('toId', accounts[1].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/accounts",
+            "description": "RF-CTA-003"
+          }
+        },
+        {
+          "name": "Obtener cuenta por ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}",
+            "description": "RF-CTA-002"
+          }
+        },
+        {
+          "name": "Resumen de cuenta",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}/summary",
+            "description": "RF-RES-001. Saldo, total acreditado, total debitado y cantidad de movimientos."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operaciones de saldo",
+      "item": [
+        {
+          "name": "Depositar",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}"
+            },
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}/deposit",
+            "description": "RF-CAR-001"
+          }
+        },
+        {
+          "name": "Retirar",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000\n}"
+            },
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}/withdraw",
+            "description": "RF-DEB-001"
+          }
+        },
+        {
+          "name": "Retirar — saldo insuficiente (409)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 999999999\n}"
+            },
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}/withdraw",
+            "description": "RF-DEB-002"
+          }
+        },
+        {
+          "name": "Transferir",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromId\": \"{{fromId}}\",\n  \"toId\": \"{{toId}}\",\n  \"amount\": 1500\n}"
+            },
+            "url": "{{baseUrl}}/api/transfers",
+            "description": "RF-TRF-001"
+          }
+        },
+        {
+          "name": "Transferir — misma cuenta (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromId\": \"{{accountId}}\",\n  \"toId\": \"{{accountId}}\",\n  \"amount\": 100\n}"
+            },
+            "url": "{{baseUrl}}/api/transfers",
+            "description": "RF-TRF-003"
+          }
+        },
+        {
+          "name": "Idempotencia — depósito repetido",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "clave-fija-prueba-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500\n}"
+            },
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}/deposit",
+            "description": "RF-CNC-002. Ejecutar dos veces: el saldo no debe duplicarse."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Movimientos",
+      "item": [
+        {
+          "name": "Historial completo",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/accounts/{{accountId}}/movements",
+            "description": "RF-MOV-001"
+          }
+        },
+        {
+          "name": "Historial filtrado por tipo DEPOSIT",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/movements?type=DEPOSIT",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts", "{{accountId}}", "movements"],
+              "query": [{ "key": "type", "value": "DEPOSIT" }]
+            },
+            "description": "RF-RES-002. type: DEPOSIT | WITHDRAW | TRANSFER"
+          }
+        },
+        {
+          "name": "Historial filtrado por rango de fechas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/movements?startDate=2026-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.999Z",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts", "{{accountId}}", "movements"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-01T00:00:00.000Z" },
+                { "key": "endDate", "value": "2026-12-31T23:59:59.999Z" }
+              ]
+            },
+            "description": "RF-RES-002. Fechas en formato ISO 8601."
+          }
+        },
+        {
+          "name": "Historial filtrado — tipo y fechas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/movements?type=WITHDRAW&startDate=2026-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.999Z",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts", "{{accountId}}", "movements"],
+              "query": [
+                { "key": "type", "value": "WITHDRAW" },
+                { "key": "startDate", "value": "2026-01-01T00:00:00.000Z" },
+                { "key": "endDate", "value": "2026-12-31T23:59:59.999Z" }
+              ]
+            },
+            "description": "RF-RES-002. Combinación de filtros."
+          }
+        }
+      ]
+    }
+  ]
+}
