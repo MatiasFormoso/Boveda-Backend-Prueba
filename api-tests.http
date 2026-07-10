@@ -1,0 +1,116 @@
+# Bóveda API — pruebas REST Client
+# Requisitos: npm run dev en http://localhost:3000
+#
+# 1) Ejecutá "Listar cuentas" y copiá los UUID en las variables de abajo.
+# 2) Hacé clic en "Send Request" sobre cada bloque.
+
+@baseUrl = http://localhost:3000
+@accountId = REEMPLAZAR_UUID_CUENTA
+@fromId = REEMPLAZAR_UUID_ORIGEN
+@toId = REEMPLAZAR_UUID_DESTINO
+@idempotencyKey = demo-clave-001
+
+###############################################################################
+# Cuentas
+###############################################################################
+
+### Crear cuenta (RF-CTA-001)
+POST {{baseUrl}}/api/accounts
+Content-Type: application/json
+
+{
+  "titular": "Juan Pérez"
+}
+
+### Listar cuentas (RF-CTA-003)
+GET {{baseUrl}}/api/accounts
+
+### Obtener cuenta por ID (RF-CTA-002)
+GET {{baseUrl}}/api/accounts/{{accountId}}
+
+### Resumen de cuenta (RF-RES-001)
+GET {{baseUrl}}/api/accounts/{{accountId}}/summary
+
+###############################################################################
+# Operaciones de saldo
+###############################################################################
+
+### Depositar (RF-CAR-001)
+POST {{baseUrl}}/api/accounts/{{accountId}}/deposit
+Content-Type: application/json
+Idempotency-Key: {{idempotencyKey}}
+
+{
+  "amount": 5000
+}
+
+### Retirar (RF-DEB-001)
+POST {{baseUrl}}/api/accounts/{{accountId}}/withdraw
+Content-Type: application/json
+Idempotency-Key: {{idempotencyKey}}
+
+{
+  "amount": 1000
+}
+
+### Retirar — saldo insuficiente, esperado 409 (RF-DEB-002)
+POST {{baseUrl}}/api/accounts/{{accountId}}/withdraw
+Content-Type: application/json
+
+{
+  "amount": 999999999
+}
+
+### Transferir (RF-TRF-001)
+POST {{baseUrl}}/api/transfers
+Content-Type: application/json
+Idempotency-Key: {{idempotencyKey}}
+
+{
+  "fromId": "{{fromId}}",
+  "toId": "{{toId}}",
+  "amount": 1500
+}
+
+### Transferir — misma cuenta, esperado 422 (RF-TRF-003)
+POST {{baseUrl}}/api/transfers
+Content-Type: application/json
+
+{
+  "fromId": "{{accountId}}",
+  "toId": "{{accountId}}",
+  "amount": 100
+}
+
+### Idempotencia — depósito repetido (RF-CNC-002)
+# Ejecutá este bloque dos veces seguidas: el saldo no debe duplicarse.
+POST {{baseUrl}}/api/accounts/{{accountId}}/deposit
+Content-Type: application/json
+Idempotency-Key: clave-fija-prueba-001
+
+{
+  "amount": 2500
+}
+
+###############################################################################
+# Movimientos
+###############################################################################
+
+### Historial completo (RF-MOV-001)
+GET {{baseUrl}}/api/accounts/{{accountId}}/movements
+
+### Historial filtrado por tipo DEPOSIT (RF-RES-002)
+GET {{baseUrl}}/api/accounts/{{accountId}}/movements?type=DEPOSIT
+
+### Historial filtrado por rango de fechas (RF-RES-002)
+GET {{baseUrl}}/api/accounts/{{accountId}}/movements?startDate=2026-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.999Z
+
+### Historial filtrado — tipo WITHDRAW y fechas (RF-RES-002)
+GET {{baseUrl}}/api/accounts/{{accountId}}/movements?type=WITHDRAW&startDate=2026-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.999Z
+
+###############################################################################
+# Health
+###############################################################################
+
+### Estado conexión DB (home)
+GET {{baseUrl}}/
