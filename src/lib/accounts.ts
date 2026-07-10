@@ -8,6 +8,21 @@ export interface AccountRow {
   updated_at: Date;
 }
 
+export interface MovementFilters {
+  startDate?: Date;
+  endDate?: Date;
+  types?: string[];
+}
+
+export interface AccountSummaryRow {
+  id: string;
+  titular: string;
+  balance: string;
+  total_acreditado: string;
+  total_debitado: string;
+  cantidad_movimientos: string;
+}
+
 export interface MovementRow {
   id: string;
   operation_id: string;
@@ -41,6 +56,17 @@ export function formatMovement(row: MovementRow) {
   };
 }
 
+export function formatAccountSummary(row: AccountSummaryRow) {
+  return {
+    id: row.id,
+    titular: row.titular,
+    balance: row.balance,
+    totalAcreditado: row.total_acreditado,
+    totalDebitado: row.total_debitado,
+    cantidadMovimientos: Number(row.cantidad_movimientos),
+  };
+}
+
 export async function findAccountById(id: string) {
   const result = await query<AccountRow>(
     `SELECT id, titular, balance, created_at, updated_at
@@ -58,15 +84,50 @@ export async function listAccounts() {
   return result.rows;
 }
 
-export async function listMovements(accountId: string) {
+export async function listMovements(
+  accountId: string,
+  filters?: MovementFilters,
+) {
+  const conditions = ["account_id = $1"];
+  const params: unknown[] = [accountId];
+  let index = 2;
+
+  if (filters?.startDate) {
+    conditions.push(`created_at >= $${index}`);
+    params.push(filters.startDate);
+    index++;
+  }
+
+  if (filters?.endDate) {
+    conditions.push(`created_at <= $${index}`);
+    params.push(filters.endDate);
+    index++;
+  }
+
+  if (filters?.types && filters.types.length > 0) {
+    conditions.push(`type = ANY($${index}::movement_type[])`);
+    params.push(filters.types);
+    index++;
+  }
+
   const result = await query<MovementRow>(
     `SELECT id, operation_id, account_id, type, amount, balance_after, description, created_at
      FROM movements
-     WHERE account_id = $1
+     WHERE ${conditions.join(" AND ")}
      ORDER BY created_at DESC`,
-    [accountId],
+    params,
   );
   return result.rows;
+}
+
+export async function getAccountSummary(accountId: string) {
+  const result = await query<AccountSummaryRow>(
+    `SELECT id, titular, balance, total_acreditado, total_debitado, cantidad_movimientos
+     FROM account_summary
+     WHERE id = $1`,
+    [accountId],
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function createAccount(titular: string) {

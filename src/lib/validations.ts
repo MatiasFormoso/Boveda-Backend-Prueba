@@ -40,6 +40,33 @@ export const accountIdParamSchema = z.object({
   id: uuid,
 });
 
+export const movementFilterTypeSchema = z.enum([
+  "DEPOSIT",
+  "WITHDRAW",
+  "TRANSFER",
+]);
+
+export const movementQuerySchema = z.object({
+  startDate: z
+    .string()
+    .datetime({ message: "startDate debe ser una fecha ISO válida" })
+    .optional(),
+  endDate: z
+    .string()
+    .datetime({ message: "endDate debe ser una fecha ISO válida" })
+    .optional(),
+  type: movementFilterTypeSchema.optional(),
+});
+
+export const MOVEMENT_FILTER_MAP: Record<
+  z.infer<typeof movementFilterTypeSchema>,
+  string[]
+> = {
+  DEPOSIT: ["deposito"],
+  WITHDRAW: ["debito"],
+  TRANSFER: ["transferencia_entrada", "transferencia_salida"],
+};
+
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 export type DepositInput = z.infer<typeof depositSchema>;
 export type WithdrawInput = z.infer<typeof withdrawSchema>;
